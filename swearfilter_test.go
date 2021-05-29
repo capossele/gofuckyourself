@@ -2,6 +2,8 @@ package swearfilter
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -56,5 +58,16 @@ func TestCheck(t *testing.T) {
 		default:
 			t.Errorf("Check test invalid, got test messages length: %d, want test messages length: %d", len(messages), 4)
 		}
+	}
+}
+
+func TestCheck2(t *testing.T) {
+	filter := NewSwearFilter(true, "fuck")
+	messages := []string{"fucking", "fûçk", "asdf", "what the f u c k dude"}
+
+	for i := 0; i < len(messages); i++ {
+		trippers, err := filter.Check(messages[i])
+		require.NoError(t, err)
+		t.Log(trippers)
 	}
 }
