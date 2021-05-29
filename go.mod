@@ -1,4 +1,4 @@
-module swearfilter
+module github.com/capossele/swearfilter
 
 go 1.16
 
