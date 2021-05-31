@@ -57,7 +57,7 @@ func TestCheck(t *testing.T) {
 
 func TestCheck2(t *testing.T) {
 	filter := NewSwearFilter(true, "fuck")
-	messages := []string{"fucking", "fûçk", "asdf", "what the f u c k dude"}
+	messages := []string{"FuCking", "fûçk", "asdf", "what the f u c k dude"}
 
 	for i := 0; i < len(messages); i++ {
 		trippers, err := filter.Check(messages[i])
