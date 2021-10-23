@@ -18,21 +18,24 @@ type SwearFilter struct {
 	DisableMultiWhitespaceStripping bool //Disables stripping down multiple whitespaces (ex: hello[space][space]world -> hello[space]world)
 	DisableZeroWidthStripping       bool //Disables stripping zero-width spaces
 	EnableSpacedBypass              bool //Disables testing for spaced bypasses (if hell is in filter, look for occurrences of h and detect only alphabetic characters that follow; ex: h[space]e[space]l[space]l[space] -> hell)
+	DisableSimpleRegex              bool //Disables using strings.HasPrefix if the string starts with ^ and strings.HasSuffix if it ends with $. Only strings.Contains will be used
+	EnableFullRegex                 bool //Enables treating each word in the wordlist as a regex
 
 	//A list of words to check against the filters
-	BadWords map[string]struct{}
-	mutex    sync.RWMutex
+	BadWords       map[string]struct{}
+	BadWordRegexps map[string]*regexp.Regexp
+	mutex          sync.RWMutex
 }
 
 //NewSwearFilter returns an initialized SwearFilter struct to check messages against
-func NewSwearFilter(enableSpacedBypass bool, uhohwords ...string) (filter *SwearFilter) {
+func NewSwearFilter(enableSpacedBypass bool, enableFullRegex bool, uhohwords ...string) (filter *SwearFilter) {
 	filter = &SwearFilter{
 		EnableSpacedBypass: enableSpacedBypass,
+		EnableFullRegex:    enableFullRegex,
 		BadWords:           make(map[string]struct{}),
 	}
-	for _, word := range uhohwords {
-		filter.BadWords[word] = struct{}{}
-	}
+
+	filter.Add(uhohwords...)
 	return
 }
 
@@ -41,8 +44,14 @@ func (filter *SwearFilter) Check(msg string) (trippedWords []string, err error) 
 	filter.mutex.RLock()
 	defer filter.mutex.RUnlock()
 
-	if filter.BadWords == nil || len(filter.BadWords) == 0 {
-		return nil, nil
+	if filter.EnableFullRegex {
+		if filter.BadWordRegexps == nil || len(filter.BadWordRegexps) == 0 {
+			return nil, nil
+		}
+	} else {
+		if filter.BadWords == nil || len(filter.BadWords) == 0 {
+			return nil, nil
+		}
 	}
 
 	message := strings.ToLower(msg)
@@ -80,21 +89,37 @@ func (filter *SwearFilter) Check(msg string) (trippedWords []string, err error) 
 
 	trippedWords = make([]string, 0)
 	checkSpace := false
-	for swear := range filter.BadWords {
-		if swear == " " {
-			checkSpace = true
-			continue
-		}
 
-		if strings.Contains(message, swear) {
-			trippedWords = append(trippedWords, swear)
-			continue
-		}
+	if filter.EnableFullRegex {
+		for swear := range filter.BadWordRegexps {
+			if swear == " " {
+				checkSpace = true
+				continue
+			}
 
-		if filter.EnableSpacedBypass {
-			nospaceMessage := strings.Replace(message, " ", "", -1)
-			if strings.Contains(nospaceMessage, swear) {
+			if filter.scan(message, swear) {
 				trippedWords = append(trippedWords, swear)
+			} else if filter.EnableSpacedBypass {
+				nospaceMessage := strings.Replace(message, " ", "", -1)
+				if filter.scan(nospaceMessage, swear) {
+					trippedWords = append(trippedWords, swear)
+				}
+			}
+		}
+	} else {
+		for swear := range filter.BadWords {
+			if swear == " " {
+				checkSpace = true
+				continue
+			}
+
+			if filter.scan(message, swear) {
+				trippedWords = append(trippedWords, swear)
+			} else if filter.EnableSpacedBypass {
+				nospaceMessage := strings.Replace(message, " ", "", -1)
+				if filter.scan(nospaceMessage, swear) {
+					trippedWords = append(trippedWords, swear)
+				}
 			}
 		}
 	}
@@ -106,17 +131,57 @@ func (filter *SwearFilter) Check(msg string) (trippedWords []string, err error) 
 	return
 }
 
+func (filter *SwearFilter) scan(message string, swear string) bool {
+	if filter.EnableFullRegex {
+		return filter.BadWordRegexps[swear].MatchString(message)
+	} else {
+		if filter.DisableSimpleRegex {
+			return strings.Contains(message, swear)
+		} else {
+			hasSimplePrefix := false
+			if string(swear[0]) == "^" {
+				hasSimplePrefix = true
+				return strings.HasPrefix(message, swear[1:])
+			}
+
+			hasSimpleSuffix := false
+			strLen := len(swear)
+			if string(swear[strLen-1]) == "$" {
+				hasSimpleSuffix = true
+				return strings.HasSuffix(message, swear[:strLen-1])
+			}
+
+			// fallback to substring matching
+			if !hasSimplePrefix && !hasSimpleSuffix {
+				return strings.Contains(message, swear)
+			}
+		}
+	}
+
+	return false
+}
+
 //Add appends the given word to the uhohwords list
 func (filter *SwearFilter) Add(badWords ...string) {
 	filter.mutex.Lock()
 	defer filter.mutex.Unlock()
 
-	if filter.BadWords == nil {
-		filter.BadWords = make(map[string]struct{})
-	}
+	if filter.EnableFullRegex {
+		if filter.BadWordRegexps == nil {
+			filter.BadWordRegexps = make(map[string]*regexp.Regexp)
+		}
 
-	for _, word := range badWords {
-		filter.BadWords[word] = struct{}{}
+		for _, word := range badWords {
+			filter.BadWordRegexps[word] = regexp.MustCompile(word)
+		}
+	} else {
+		if filter.BadWords == nil {
+			filter.BadWords = make(map[string]struct{})
+		}
+
+		for _, word := range badWords {
+			filter.BadWords[word] = struct{}{}
+		}
 	}
 }
 
@@ -125,8 +190,14 @@ func (filter *SwearFilter) Delete(badWords ...string) {
 	filter.mutex.Lock()
 	defer filter.mutex.Unlock()
 
-	for _, word := range badWords {
-		delete(filter.BadWords, word)
+	if filter.EnableFullRegex {
+		for _, word := range badWords {
+			delete(filter.BadWordRegexps, word)
+		}
+	} else {
+		for _, word := range badWords {
+			delete(filter.BadWords, word)
+		}
 	}
 }
 
@@ -135,12 +206,22 @@ func (filter *SwearFilter) Load() (activeWords []string) {
 	filter.mutex.RLock()
 	defer filter.mutex.RUnlock()
 
-	if filter.BadWords == nil {
-		return nil
-	}
+	if filter.EnableFullRegex {
+		if filter.BadWordRegexps == nil {
+			return nil
+		}
 
-	for word := range filter.BadWords {
-		activeWords = append(activeWords, word)
+		for word := range filter.BadWordRegexps {
+			activeWords = append(activeWords, word)
+		}
+	} else {
+		if filter.BadWords == nil {
+			return nil
+		}
+
+		for word := range filter.BadWords {
+			activeWords = append(activeWords, word)
+		}
 	}
 	return
 }
