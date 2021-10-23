@@ -26,6 +26,12 @@ func TestNew(t *testing.T) {
 	if len(filter.BadWords) != 2 {
 		t.Errorf("Filter option BadWords was incorrect, got length: %d, want length: %d", len(filter.BadWords), 2)
 	}
+	if filter.DisableSimpleRegex {
+		t.Errorf("Filter option DisableSimpleRegex was incorrect, got: %t, want: %t", filter.DisableSimpleRegex, false)
+	}
+	if filter.EnableFullRegex {
+		t.Errorf("Filter option EnableFullRegex was incorrect, got: %t, want: %t", filter.EnableFullRegex, false)
+	}
 }
 
 func TestCheck(t *testing.T) {
@@ -63,5 +69,56 @@ func TestCheck2(t *testing.T) {
 		trippers, err := filter.Check(messages[i])
 		require.NoError(t, err)
 		t.Log(trippers)
+	}
+}
+
+func TestCheckSimpleRegex(t *testing.T) {
+	tests := map[string]bool{
+		"fuckx":   true,
+		"xfuck":   false,
+		"xthing":  true,
+		"thingx":  true,
+		"xthingx": true,
+		"xthat":   true,
+		"thatx":   false,
+		"ok":      false,
+	}
+
+	for _, spacedBypass := range []bool{true, false} {
+		filter := NewSwearFilter(true, "^fuck", "thing", "that$")
+		filter.EnableSpacedBypass = spacedBypass
+
+		for test, expected := range tests {
+			trippers, err := filter.Check(test)
+			t.Logf("test=%s, expected=%v, trippers=%v\n", test, expected, trippers)
+			require.NoError(t, err)
+			require.Equal(t, expected, len(trippers) > 0)
+		}
+	}
+}
+
+func TestCheckSimpleRegexDisabled(t *testing.T) {
+	tests := map[string]bool{
+		"fuckx":   false,
+		"xfuck":   false,
+		"xthing":  true,
+		"thingx":  true,
+		"xthingx": true,
+		"xthat":   false,
+		"thatx":   false,
+		"ok":      false,
+	}
+
+	for _, spacedBypass := range []bool{true, false} {
+		filter := NewSwearFilter(true, "^fuck", "thing", "that$")
+		filter.DisableSimpleRegex = true
+		filter.EnableSpacedBypass = spacedBypass
+
+		for test, expected := range tests {
+			trippers, err := filter.Check(test)
+			t.Logf("test=%s, expected=%v, trippers=%v\n", test, expected, trippers)
+			require.NoError(t, err)
+			require.Equal(t, expected, len(trippers) > 0)
+		}
 	}
 }

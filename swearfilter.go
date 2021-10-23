@@ -18,6 +18,8 @@ type SwearFilter struct {
 	DisableMultiWhitespaceStripping bool //Disables stripping down multiple whitespaces (ex: hello[space][space]world -> hello[space]world)
 	DisableZeroWidthStripping       bool //Disables stripping zero-width spaces
 	EnableSpacedBypass              bool //Disables testing for spaced bypasses (if hell is in filter, look for occurrences of h and detect only alphabetic characters that follow; ex: h[space]e[space]l[space]l[space] -> hell)
+	DisableSimpleRegex              bool //Disables using strings.HasPrefix if the string starts with ^ and strings.HasSuffix if it ends with $. Only strings.Contains will be used
+	EnableFullRegex                 bool //Enables treating each word in the wordlist as a regex
 
 	//A list of words to check against the filters
 	BadWords map[string]struct{}
@@ -86,14 +88,11 @@ func (filter *SwearFilter) Check(msg string) (trippedWords []string, err error) 
 			continue
 		}
 
-		if strings.Contains(message, swear) {
+		if filter.scan(message, swear) {
 			trippedWords = append(trippedWords, swear)
-			continue
-		}
-
-		if filter.EnableSpacedBypass {
+		} else if filter.EnableSpacedBypass {
 			nospaceMessage := strings.Replace(message, " ", "", -1)
-			if strings.Contains(nospaceMessage, swear) {
+			if filter.scan(nospaceMessage, swear) {
 				trippedWords = append(trippedWords, swear)
 			}
 		}
@@ -104,6 +103,40 @@ func (filter *SwearFilter) Check(msg string) (trippedWords []string, err error) 
 	}
 
 	return
+}
+
+func (filter *SwearFilter) scan(message string, swear string) bool {
+	if filter.DisableSimpleRegex {
+		if strings.Contains(message, swear) {
+			return true
+		}
+	} else {
+		hasSimplePrefix := false
+		if string(swear[0]) == "^" {
+			hasSimplePrefix = true
+			if strings.HasPrefix(message, swear[1:]) {
+				return true
+			}
+		}
+
+		hasSimpleSuffix := false
+		strLen := len(swear)
+		if string(swear[strLen-1]) == "$" {
+			hasSimpleSuffix = true
+			if strings.HasSuffix(message, swear[:strLen-1]) {
+				return true
+			}
+		}
+
+		// fallback to substring matching
+		if !hasSimplePrefix && !hasSimpleSuffix {
+			if strings.Contains(message, swear) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 //Add appends the given word to the uhohwords list

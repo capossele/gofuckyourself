@@ -7,7 +7,7 @@
 A sanitization-based swear filter for Go.
 
 # Installing
-`go get github.com/JoshuaDoes/gofuckyourself`
+Just `import github.com/capossele/swearfilter` if using go modules.
 
 # Example
 ```Go
@@ -16,11 +16,11 @@ package main
 import (
 	"fmt"
 
-	swearfilter "github.com/JoshuaDoes/gofuckyourself"
+	"github.com/capossele/swearfilter"
 )
 
-var message = "This is a fûçking message with shitty swear words."
-var swears = []string{"fuck", "shit"}
+var message = "This is a fûçking message with shitty swear words asswipe."
+var swears = []string{"fuck", "shit", "^ass"}
 
 func main() {
 	filter := swearfilter.New(false, false, false, false, false, swears...)
@@ -34,9 +34,14 @@ func main() {
 ```
 > go run main.go
 Swear found:  true
-Swears tripped:  [fuck shit]
+Swears tripped:  [fuck shit ^ass]
 Error:  <nil>
 ```
+
+## Options
+By default substring testing is performed, e.g. so `abc` will match any of `1abc`, `1abc2` and `abc2`.
+
+To help keep word lists concise, simple (fake) regex matching is supported. The only control characters supported are `^` and `$`. These will perform prefix/suffix matches respectively. E.g. so `^ass` will match `asses` but not `pass`.
 
 ## License
 The source code for gofuckyourself is released under the MIT License. See LICENSE for more details.
