@@ -41,7 +41,9 @@ Error:  <nil>
 ## Options
 By default substring testing is performed, e.g. so `abc` will match any of `1abc`, `1abc2` and `abc2`.
 
-To help keep word lists concise, simple (simulated) regex matching is supported. The only control characters supported are `^` and `$`. These will perform prefix/suffix matches respectively. E.g. so `^ass` will match `asses` but not `pass`. These simple regexes don't compile regexes so may be faster since they're just using raw string functions (but they havent been benchmarked).
+To help keep word lists concise but performance good, simple (simulated) regex matching is supported. The only control characters supported are `^` and `$`. These will perform prefix/suffix string match tests respectively. E.g. so `^ass` will match `asses` but not `pass`. These simple regexes aren't compiled to regexes internally so may be faster (but they haven't been benchmarked).
+
+Full regex support can be enabled by passing the relevant parameter when calling `swearfilter.New`. In this case, each swear word will be compiled to a regex and tested with regex matching.
 
 ## License
 The source code for gofuckyourself is released under the MIT License. See LICENSE for more details.

@@ -7,7 +7,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	filter := NewSwearFilter(true, "fuck", "hell")
+	filter := NewSwearFilter(true, false, "fuck", "hell")
 	if filter.DisableNormalize {
 		t.Errorf("Filter option DisableNormalize was incorrect, got: %t, want: %t", filter.DisableNormalize, false)
 	}
@@ -35,7 +35,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestCheck(t *testing.T) {
-	filter := NewSwearFilter(true, "fuck")
+	filter := NewSwearFilter(true, false, "fuck")
 	messages := []string{"fucking", "fûçk", "asdf", "what the f u c k dude"}
 
 	for i := 0; i < len(messages); i++ {
@@ -62,7 +62,7 @@ func TestCheck(t *testing.T) {
 }
 
 func TestCheck2(t *testing.T) {
-	filter := NewSwearFilter(true, "fuck")
+	filter := NewSwearFilter(true, false, "fuck")
 	messages := []string{"FuCking", "fûçk", "asdf", "what the f u c k dude"}
 
 	for i := 0; i < len(messages); i++ {
@@ -85,7 +85,7 @@ func TestCheckSimpleRegex(t *testing.T) {
 	}
 
 	for _, spacedBypass := range []bool{true, false} {
-		filter := NewSwearFilter(true, "^fuck", "thing", "that$")
+		filter := NewSwearFilter(true, false, "^fuck", "thing", "that$")
 		filter.EnableSpacedBypass = spacedBypass
 
 		for test, expected := range tests {
@@ -110,8 +110,36 @@ func TestCheckSimpleRegexDisabled(t *testing.T) {
 	}
 
 	for _, spacedBypass := range []bool{true, false} {
-		filter := NewSwearFilter(true, "^fuck", "thing", "that$")
+		filter := NewSwearFilter(true, false, "^fuck", "thing", "that$")
 		filter.DisableSimpleRegex = true
+		filter.EnableSpacedBypass = spacedBypass
+
+		for test, expected := range tests {
+			trippers, err := filter.Check(test)
+			t.Logf("test=%s, expected=%v, trippers=%v\n", test, expected, trippers)
+			require.NoError(t, err)
+			require.Equal(t, expected, len(trippers) > 0)
+		}
+	}
+}
+
+func TestCheckFullRegex(t *testing.T) {
+	tests := map[string]bool{
+		"fuckx":   true,
+		"xfuck":   false,
+		"xthing":  true,
+		"thingx":  true,
+		"xthingx": true,
+		"xthat":   true,
+		"thatx":   false,
+		"abc":     false,
+		"abcd":    true,
+		"abcde":   false,
+		"ok":      false,
+	}
+
+	for _, spacedBypass := range []bool{true, false} {
+		filter := NewSwearFilter(true, true, "^fuck", "thing", "that$", "abc.$")
 		filter.EnableSpacedBypass = spacedBypass
 
 		for test, expected := range tests {
